@@ -95,6 +95,8 @@ const RATE_HIGH = 11;
 const EXECUTIVES = [
   { name: "Rukmini", phone: "9901678562" },
   { name: "Meghana", phone: "7019974219" },
+  { name: "Shubha", phone: "8971585057" },
+  { name: "Rani", phone: "9108970455" },
   { name: "Nikitha", phone: "9535190015" },
   { name: "Prakash", phone: "9740176476" },
   { name: "Kumar", phone: "7975807667" },
@@ -102,14 +104,13 @@ const EXECUTIVES = [
   { name: "Kavi", phone: "9108970455" },
   { name: "Narasimha", phone: "9900887666" },
   { name: "Kavya", phone: "8073165374" },
-  { name: "Shubha", phone: "8971585057" },
   { name: "Vanitha", phone: "9380729861" },
 ];
 
 const SCOOTER_OPTIONS = [
   "All Round Guard",
   "Side Stand",
-  "Saree Guard",
+  "Ladies Foot Rest",
   "Grip Cover",
   "Seat Cover",
   "Floor Mat",
@@ -133,6 +134,8 @@ const DOCS_REQUIRED = [
   "Local Address Proof",
 ];
 
+const MEGHANA_NAME = "Meghana";
+
 /* ======================
    HELPERS
    ====================== */
@@ -148,16 +151,6 @@ const inr0 = (n) =>
     maximumFractionDigits: 0,
   }).format(Math.max(0, Math.round(n || 0)));
 
-const toE164India = (raw) => {
-  const digits = String(raw || "").replace(/\D/g, "");
-  const noLeadZero = digits.replace(/^0+/, "");
-  if (!noLeadZero) return "";
-  if (noLeadZero.length === 10) return `91${noLeadZero}`;
-  if (noLeadZero.startsWith("91") && noLeadZero.length === 12) return noLeadZero;
-  return noLeadZero;
-};
-
-// Silent submit to Google Form
 const submitToGoogleForm = (entries) => {
   const iframeName = "gform_silent_target_" + Date.now();
   const iframe = document.createElement("iframe");
@@ -303,6 +296,14 @@ export default function Quotation() {
   }, [form]);
 
   useEffect(() => {
+  // When NH Motors is selected, default the executive to Meghana once.
+  if (brand === "NH") {
+    form.setFieldsValue({ executive: MEGHANA_NAME }); // or "Meghana"
+  }
+}, [brand, form]);
+
+
+  useEffect(() => {
     if (vehicleType === "scooter") {
       setFittings(["Side Stand", "Floor Mat", "ISI Helmet", "Grip Cover"]);
     } else {
@@ -351,27 +352,26 @@ export default function Quotation() {
   };
 
   // ---------- Android-proof A4 print ----------
- const handlePrint = async () => {
-  try {
-    await form.validateFields([
-      "serialNo","name","mobile","address",
-      "company","bikeModel","variant","onRoadPrice",
-    ]);
-  } catch {
-    message.warning("Fix the highlighted fields before printing.");
-    return;
-  }
+  const handlePrint = async () => {
+    try {
+      await form.validateFields([
+        "serialNo", "name", "mobile", "address",
+        "company", "bikeModel", "variant", "onRoadPrice",
+      ]);
+    } catch {
+      message.warning("Fix the highlighted fields before printing.");
+      return;
+    }
 
-  const page = pageRef.current;
-  if (!page) { window.print(); return; }
+    const page = pageRef.current;
+    if (!page) { window.print(); return; }
 
-  // microtask: flush React DOM
-  await new Promise(r => setTimeout(r, 0));
+    // Ensure latest React commit is flushed
+    await new Promise((r) => setTimeout(r, 0));
 
-  // ---- clone + normalize assets ----
-  const cloned = page.cloneNode(true);
+    const cloned = page.cloneNode(true);
 
-  // canvas -> img (Android print-safe)
+ // canvas -> img (Android print-safe)
   cloned.querySelectorAll("canvas").forEach(cnv => {
     try {
       const img = document.createElement("img");
@@ -385,13 +385,14 @@ export default function Quotation() {
     }
   });
 
+
   // absolute + cache-busted images
   cloned.querySelectorAll("img").forEach(img => {
     const src = img.getAttribute("src");
     if (src && !src.startsWith("data:")) img.setAttribute("src", absBust(src));
   });
 
-  const PRINT_STYLES = `
+ const PRINT_STYLES = `
     @page { size: A4 portrait; margin: 0; }
     html, body {
       margin: 0 !important; padding: 0 !important; background: #fff !important;
@@ -425,6 +426,7 @@ export default function Quotation() {
     }
   `;
 
+
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   if (isMobile) {
@@ -451,7 +453,7 @@ export default function Quotation() {
     `);
     doc.close();
 
-    // adopt/import the cloned node into the new document
+// adopt/import the cloned node into the new document
     const mount = doc.querySelector(".print-wrap");
     const node = doc.importNode(cloned, true);
     mount.appendChild(node);
@@ -557,7 +559,8 @@ export default function Quotation() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []); // handlePrint uses stable inner functions/values
 
-  const handleSaveToForm = async () => {
+
+const handleSaveToForm = async () => {
     const v = await form.validateFields([
       "serialNo", "name", "mobile", "address",
       "company", "bikeModel", "variant", "onRoadPrice", "executive", "remarks",
@@ -575,45 +578,120 @@ export default function Quotation() {
     return v;
   };
 
-  const handleWhatsApp = async () => {
+  const handleSaveClick = async () => {
     try {
-      await form.validateFields(["name", "mobile", "company", "bikeModel", "variant"]);
-    } catch {
-      message.warning("Please enter Name, Mobile, Company, Model and Variant.");
+      await handleSaveToForm();
+      message.success("Saved successfully.");
+    } catch (err) {
+      console.warn("Save failed:", err);
+      message.error("Could not save. Please check required fields and try again.");
+    }
+  };
+ // --------- NEW: WhatsApp deep-link (frontend only) ----------
+  const toE164NoPlusIndia = (raw) => {
+    const digits = String(raw || "").replace(/\D/g, "").replace(/^0+/, "");
+    if (digits.length === 10) return `91${digits}`;
+    if (digits.startsWith("91") && digits.length === 12) return digits;
+    return "";
+  };
+
+  // Updated WhatsApp share handler with a warmer, impressive welcome message
+// --------- UPDATED: WhatsApp deep-link handler (adds highlighted Free Extra Fittings) ----------
+const handleWhatsAppClick = async () => {
+  try {
+    // Validate essentials before composing the message
+    const v = await form.validateFields([
+      "serialNo", "name", "mobile",
+      "company", "bikeModel", "variant", "onRoadPrice"
+    ]);
+
+    // Normalize phone to E.164 (India) without plus
+    const phone = toE164NoPlusIndia(v.mobile);
+    if (!phone) {
+      message.error("Enter a valid 10-digit Indian mobile to open WhatsApp.");
       return;
     }
 
-    let savedOk = true;
-    try {
-      await handleSaveToForm();
-    } catch (err) {
-      savedOk = false;
-      console.warn("Silent save failed (continuing to WhatsApp):", err);
+    // Pull values from state/form, with safe fallbacks
+    const showroomName = (brand === "SHANTHA" ? "Shantha Motors" : "NH Motors");
+    const name   = (form.getFieldValue("name") || "-").trim();
+    const comp   = (company || form.getFieldValue("company") || "-").trim();
+    const mdl    = (model   || form.getFieldValue("bikeModel") || "-").trim();
+    const varnt  = (variant || form.getFieldValue("variant")   || "-").trim();
+    const priceNum = form.getFieldValue("onRoadPrice") ?? onRoadPrice ?? 0;
+
+    // Executive contact
+    const execPhone = (EXECUTIVES.find(e => e.name === executiveName) || {}).phone || "-";
+
+    // Quotation date (IST)
+    const printDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+    // EMI helpers
+    const monthly = (typeof monthlyFor === "function") ? monthlyFor : () => 0;
+    const tenureList = Array.isArray(tenures) && tenures.length ? tenures : ["12","24","36","48"];
+
+    // Selected fittings (highlight only those the user ticked)
+    const selectedFittings = Array.isArray(fittings) ? fittings.filter(Boolean) : [];
+    const selectedDocsReq = Array.isArray(docsReq) ? docsReq.filter(Boolean) : [];
+
+    // ---------- Message copy (short, warm, impressive) ----------
+    const header = [
+      `*Hi ${name}, Welcome to ${showroomName}! 🚀*`,
+      `_Your personalized quotation is ready — clear, quick & tailored for you._`,
+      ``
+    ];
+
+    const bullets = [
+      `• *Quotation Date:* ${printDate}`,
+      `• *Vehicle:* ${comp} ${mdl} ${varnt}`,
+      `• *On-Road Price:* ${inr0(priceNum)}`
+    ];
+
+    if (mode === "loan") {
+      bullets.push(
+        `• *EMI Options (approx.):*`,
+        `   – Down Payment: ${inr0(downPayment || 0)}`,
+        ...tenureList.map((mo) => `   – ${mo} months: ${inr0(monthly(mo))}`)
+      );
     }
 
-    const customerName = (form.getFieldValue("name") || "").trim();
-    const mobileRaw = form.getFieldValue("mobile");
-    const e164 = toE164India(mobileRaw);
-    const companyVal = company || form.getFieldValue("company") || "";
-    const modelVal = model || form.getFieldValue("bikeModel") || "";
-    const variantVal = variant || form.getFieldValue("variant") || "";
-
-    const adminMsg =
-      `New quotation details:` +
-      `\nName: ${customerName || "-"}` +
-      `\nMobile: ${e164 ? "+" + e164 : (mobileRaw || "-")}` +
-      `\nVehicle: ${[companyVal, modelVal, variantVal].filter(Boolean).join(" ") || "-"}`;
-
-    const adminNumber = "919731366921";
-    const url = `https://wa.me/${adminNumber}?text=${encodeURIComponent(adminMsg)}`;
-    window.open(url, "_blank");
-
-    if (savedOk) {
-      message.success("Saved to sheet and opened WhatsApp with details.");
-    } else {
-      message.warning("Could not save to sheet, but WhatsApp was opened with details.");
+    // ✅ NEW: Highlight Free Extra Fittings the user selected
+    if (selectedFittings.length) {
+      bullets.push(
+        `• *Free Extra Fittings:*`,
+        ...selectedFittings.map(f => `   ✅ ${f}`)
+      );
     }
-  };
+    // ✅ NEW: Highlight Free Extra Fittings the user selected
+    if (selectedDocsReq.length) {
+      bullets.push(
+        `• *Documents Required:*`,
+        ...selectedDocsReq.map(f => `   ✅ ${f}`)
+      );
+    }
+
+    // Contact + note
+    bullets.push(
+      `• *Sales Advisor:* ${executiveName || "-"} (${execPhone})`,
+      `• *Note:* Prices are indicative and may change without prior notice.`
+    );
+
+    const cta = [
+      ``,
+      `✨ *${showroomName} — Ride with Pride, Drive with Confidence.* ✨`
+    ];
+
+    const lines = [...header, ...bullets, ...cta];
+    const text = lines.join("\n");
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+
+    const w = window.open(url, "_blank", "noopener,noreferrer");
+    if (!w) window.location.href = url;
+
+  } catch {
+    message.warning("Please fill all required fields before sending on WhatsApp.");
+  }
+};
 
   const PrintList = ({ items }) => {
     if (!items?.length) return <span>-</span>;
@@ -633,7 +711,7 @@ export default function Quotation() {
         @media print { .print-sheet { display: block; } .no-print { display: none !important; } }
       `}</style>
 
-      {/* On-screen inputs */}
+  {/* On-screen inputs */}
       <div className="wrap no-print">
         <div className="card">
           <Form
@@ -866,13 +944,25 @@ export default function Quotation() {
 
               {/* Actions */}
               <Col span={24} style={{ textAlign: "right" }}>
+                 <Button
+                  className="no-print"
+                  onClick={handleSaveClick}
+                  style={{ marginRight: 8 }}
+                  type="default"
+                >
+                  Save
+                </Button>
+                {/* NEW: WhatsApp */}
                 <Button
                   className="no-print"
-                  onClick={handleWhatsApp}
-                  style={{ marginRight: 8, background: "#25D366", color: "#fff", borderColor: "#25D366" }}
+                  onClick={handleWhatsAppClick}
+                  style={{ marginRight: 8, background: "#25D366", borderColor: "#25D366", color: "#fff" }}
                 >
                   WhatsApp
                 </Button>
+
+               
+
                 <Button className="no-print" type="primary" icon={<PrinterOutlined />} onClick={handlePrint}>
                   Print
                 </Button>
